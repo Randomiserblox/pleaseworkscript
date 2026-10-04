@@ -1,4 +1,4 @@
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Rayfield/main/source'))()
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -11,7 +11,7 @@ local state = { busy = false, inMinigame = false, lastTP = 0, taskLock = false }
 local config = {
 ghostHunt = true, aimbot = true, autoShoot = true,
 preEventTP = true, stealthTP = true, disableNeeds = false,
-taskLoop = true
+taskLoop = true, antiAfk = true
 }
 
 local eventZones = {
@@ -138,7 +138,6 @@ end
 end
 end
 
--- wait for task to complete, max 15s
 local waited = 0
 while waited < 15 do
 if checkTaskDone() then break end
@@ -155,8 +154,8 @@ for _, o in pairs(workspace:GetDescendants()) do
 local n = o.Name:lower()
 if n:find("ghost") or n:find("spirit") or n:find("phantom") then
 if o:IsA("Model") and o:FindFirstChild("HumanoidRootPart") then
-table {.insert(g, o)
-Enabled elseif o:IsA("BasePart") then
+table.insert(g, o)
+elseif o:IsA("BasePart") then
 table.insert(g, o)
 end
 end
@@ -165,7 +164,7 @@ return g
 end
 
 local function aim(t)
-= local h = getHRP(); if not h then return false end
+local h = getHRP(); if not h then return end
 local p = t:IsA("Model") and t.HumanoidRootPart.Position or t.Position
 local cam = workspace.CurrentCamera
 cam.CFrame = cam.CFrame:Lerp(CFrame.new(cam.CFrame.Position, p), 0.25)
@@ -263,7 +262,7 @@ local Window = Rayfield:CreateWindow({
 Name = "Adopt Me + Halloween",
 LoadingTitle = "Loading",
 LoadingSubtitle = "by Colin",
-ConfigurationSaving =},
+ConfigurationSaving = {Enabled = false},
 KeySystem = false
 })
 
