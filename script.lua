@@ -9,6 +9,7 @@ end
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local VirtualUser = game:GetService("VirtualUser")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 local API = ReplicatedStorage:WaitForChild("API")
@@ -19,8 +20,7 @@ local config = {
 ghostHunt = true, aimbot = true, autoShoot = true,
 ghostAccept = true, taskLoop = true, antiAfk = true,
 disablePopups = true, blockPetMe = false,
-babyTasks = true, petTasks = true,
-walkTask = true, rideTask = true, autoEquip = true
+babyTasks = true, petTasks = true, autoEquip = true
 }
 
 local townZones = {
@@ -30,12 +30,6 @@ BabyWater = Vector3.new(-3023.935, 4013.070, 5634.844)
 
 local minigameCenter = Vector3.new(-5982.613, 10011.106, 9000.880)
 local minigameRadius = 800
-
--- only these are considered real task titles
-local knownTasks = {
-"thirsty!", "hungry!", "sleepy!", "dirty!", "sick!",
-"pet me!", "bored!", "lonely!", "walk!", "ride!", "potty!"
-}
 
 local function getHRP()
 local c = LocalPlayer.Character
@@ -64,18 +58,14 @@ end
 return nil
 end
 
-local function getPetNames()
-local names = {}
-local pets = workspace:FindFirstChild("Pets")
-if not pets then return names end
-for _, p in pairs(pets:GetChildren()) do
-if p:IsA("Model") then table.insert(names, p.Name:lower()) end
-end
-return names
-end
-
 local function isPetPopup()
-local petNames = getPetNames()
+local petNames = {}
+local pets = workspace:FindFirstChild("Pets")
+if pets then
+for _, p in pairs(pets:GetChildren()) do
+if p:IsA("Model") then table.insert(petNames, p.Name:lower()) end
+end
+end
 if #petNames == 0 then return false end
 for _, g in pairs(LocalPlayer.PlayerGui:GetDescendants()) do
 if g:IsA("TextLabel") then
@@ -89,32 +79,36 @@ return false
 end
 
 local function getActiveTaskInfo()
-local bestTitle, bestLen = nil, 999
-for _, g in pairs(LocalPlayer.PlayerGui:GetDescendants()) do
-if g:IsA("TextLabel") then
-local s = g.Text or ""
-local ls = s:lower()
--- exact match against known task titles
-for _, k in pairs(knownTasks) do
-if ls == k and #s < bestLen then
-bestTitle = s
-bestLen = #s
-break
-end
-end
-end
-end
-return bestTitle, isPetPopup()
+local gui = LocalPlayer.PlayerGui:FindFirstChild("AilmentsMonitorApp")
+if not gui then return nil, false end
+local pointer = gui:FindFirstChild("PointerBox")
+if not pointer then return nil, false end
+local box = pointer:FindFirstChild("BoxBorder")
+if not box then return nil, false end
+local area = box:FindFirstChild("TextArea")
+if not area then return nil, false end
+local title = area:FindFirstChild("Title")
+if not title then return nil, false end
+local name = title:FindFirstChild("AilmentName")
+if not name then return nil, false end
+return name.Text, isPetPopup()
 end
 
 local function checkTaskDone()
-for _, g in pairs(LocalPlayer.PlayerGui:GetDescendants()) do
-if g:IsA("TextLabel") then
-local s = (g.Text or ""):lower()
-if s == "complete" or s == "well done!" then return true end
-end
-end
-return false
+local gui = LocalPlayer.PlayerGui:FindFirstChild("AilmentsMonitorApp")
+if not gui then return true end
+local pointer = gui:FindFirstChild("PointerBox")
+if not pointer then return true end
+local box = pointer:FindFirstChild("BoxBorder")
+if not box then return true end
+local area = box:FindFirstChild("TextArea")
+if not area then return true end
+local title = area:FindFirstChild("Title")
+if not title then return true end
+local name = title:FindFirstChild("AilmentName")
+if not name then return true end
+local s = (name.Text or ""):lower()
+return s == "complete" or s == "done!"
 end
 
 local function firePromptsNearby()
@@ -141,6 +135,27 @@ end
 return false
 end
 
+local function pressKey(key)
+pcall(function() keypress(key) end)
+task.wait(0.1)
+pcall(function() keyrelease(key) end)
+end
+
+local function feedLoop()
+local waited = 0
+while waited < 30 do
+local target = isPetPopup() and "pet" or "self"
+if target == "pet" then
+pressKey(Enum.KeyCode.Two)
+else
+pressKey(Enum.KeyCode.One)
+end
+if checkTaskDone() then break end
+task.wait(0.5)
+waited = waited + 1
+end
+end
+
 local function getToolId(tool)
 if not tool then return nil end
 local id = tool:GetAttribute("Id") or tool:GetAttribute("ToolId")
@@ -162,12 +177,10 @@ firePromptsNearby()
 task.wait(1.5)
 firePromptsNearby()
 task.wait(1)
-
 local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
 if not tool then waitForTaskEnd(); return end
 local id = getToolId(tool)
 if not id then waitForTaskEnd(); return end
-
 pcall(function() API:WaitForChild("ToolAPI/ServerUseTool"):InvokeServer(id, "START") end)
 task.wait(0.3)
 pcall(function() API:WaitForChild("JournalAPI/CommitCollection"):FireServer() end)
@@ -175,7 +188,7 @@ pcall(function() API:WaitForChild("PlayerProfileAPI/RefreshProfile"):InvokeServe
 task.wait(0.3)
 pcall(function() API:WaitForChild("ToolAPI/ServerUseTool"):InvokeServer(id, "END") end)
 pcall(function() API:WaitForChild("JournalAPI/CommitCollection"):FireServer() end)
-
+feedLoop()
 waitForTaskEnd()
 end
 
@@ -189,8 +202,6 @@ pcall(function()
 API:WaitForChild("PetAPI/ReplicateActivePerformances"):FireServer(unpack(args))
 end)
 if checkTaskDone() then break end
-local title = getActiveTaskInfo()
-if not title then break end
 task.wait(0.5)
 waited = waited + 1
 end
@@ -206,50 +217,50 @@ pcall(function()
 API:WaitForChild("AilmentsAPI/ProgressPetMeAilment"):FireServer(unpack(args))
 end)
 if checkTaskDone() then break end
-local title = getActiveTaskInfo()
-if not title then break end
 task.wait(0.5)
 waited = waited + 1
 end
 end
 
+local function handleDirty()
+local pet = getPet()
+if not pet then return end
+local args = { pet }
+local waited = 0
+while waited < 30 do
+pcall(function()
+API:WaitForChild("AilmentsAPI/ProgressDirtyAilment"):FireServer(unpack(args))
+end)
+if checkTaskDone() then break end
+task.wait(0.5)
+waited = waited + 1
+end
+end
+
+local function chooseMystery()
+pcall(function()
+API:WaitForChild("AilmentsAPI/ChooseMysteryAilment"):FireServer()
+end)
+end
+
 local function handleTask(title, isPet)
 if not title then return end
 local t = title:lower()
-
 if isPet and not config.petTasks then return end
 if not isPet and not config.babyTasks then return end
 
+if t:find("mystery") then chooseMystery(); return end
 if t:find("pet me") then
 if not config.blockPetMe then handlePetMe() end
 return
 end
-if t:find("walk") then
-if not config.walkTask then return end
-local h = getHRP()
-local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-if h and humanoid then
-for i = 1, 6 do
-humanoid:MoveTo(h.Position + Vector3.new(math.random(-30,30), 0, math.random(-30,30)))
-task.wait(1.5)
-end
-humanoid:MoveTo(h.Position)
-end
-waitForTaskEnd()
-return
-end
-if t:find("ride") then
-if not config.rideTask then return end
-waitForTaskEnd()
-return
-end
+if t:find("dirty") then handleDirty(); return end
 
 if isPet then
 if t:find("sleepy") then handlePetAilment({ FallAsleep = true, FocusPet = true }); return end
-if t:find("dirty") then handlePetAilment({ Dirty = true, FocusPet = true }); return end
 if t:find("sick") then handlePetAilment({ Sick = true, FocusPet = true }); return end
-if t:find("hungry") then handlePetAilment({ FocusPet = true }); return end
-if t:find("thirsty") then handlePetAilment({ FocusPet = true }); return end
+if t:find("hungry") then handlePetAilment({ Hungry = true, FocusPet = true }); return end
+if t:find("thirsty") then handlePetAilment({ Thirsty = true, FocusPet = true }); return end
 if t:find("bored") then handlePetAilment({ FocusPet = true }); return end
 if t:find("lonely") then handlePetAilment({ FocusPet = true }); return end
 else
@@ -260,15 +271,19 @@ end
 
 local function clickGhostGallery()
 if os.clock() - state.lastGalleryClick < 3 then return false end
+local hasGallery = false
 for _, g in pairs(LocalPlayer.PlayerGui:GetDescendants()) do
 if g:IsA("TextLabel") and (g.Text or ""):lower():find("ghost gallery") then
+hasGallery = true
+break
+end
+end
+if not hasGallery then return false end
 for _, b in pairs(LocalPlayer.PlayerGui:GetDescendants()) do
-if (b:IsA("TextButton") or b:IsA("ImageButton")) and (b.Text or ""):lower():find("yes") then
+if b:IsA("TextButton") and (b.Text or ""):lower():find("yes") then
 pcall(function() b:Activate() end)
 state.lastGalleryClick = os.clock()
 return true
-end
-end
 end
 end
 return false
@@ -292,9 +307,7 @@ end
 end
 end
 
-local cachedTarget = nil
-local lastTargetCheck = 0
-
+local cachedTarget, lastTargetCheck = nil, 0
 local function getSmartTarget()
 if os.clock() - lastTargetCheck < 0.5 and cachedTarget then
 if cachedTarget.model and cachedTarget.model.Parent then
@@ -305,8 +318,7 @@ end
 end
 lastTargetCheck = os.clock()
 cachedTarget = nil
-local h = getHRP()
-if not h then return nil end
+local h = getHRP(); if not h then return nil end
 local candidates = {}
 local visuals = workspace:FindFirstChild("GhostClustersVisuals")
 if visuals then
@@ -314,16 +326,12 @@ for _, v in pairs(visuals:GetChildren()) do
 if v:IsA("Model") then
 local id = v:GetAttribute("GhostClustersId")
 local prog = v:GetAttribute("GhostClustersProgress") or 0
-local required = v:GetAttribute("GhostClustersProgressRequired") or 100
+local req = v:GetAttribute("GhostClustersProgressRequired") or 100
 local size = v:GetAttribute("GhostClustersSize") or "Small"
 local isBoss = size == "Large" or size == "Huge" or size == "Boss" or size == "Giant"
 local hrp = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChildWhichIsA("BasePart", true)
-if hrp and id and prog < required then
-table.insert(candidates, {
-model = v, id = id,
-required = required, size = size, isBoss = isBoss,
-dist = (hrp.Position - h.Position).Magnitude
-})
+if hrp and id and prog < req then
+table.insert(candidates, { model = v, id = id, required = req, isBoss = isBoss, dist = (hrp.Position - h.Position).Magnitude })
 end
 end
 end
@@ -345,25 +353,31 @@ workspace.CurrentCamera.CFrame = workspace.CurrentCamera.CFrame:Lerp(CFrame.new(
 end
 
 local function shoot(t)
-if math.random() < 0.15 then return end
 local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
 if not tool then
 for _, x in pairs(LocalPlayer.Backpack:GetChildren()) do
 if x:IsA("Tool") then x.Parent = LocalPlayer.Character; tool = x; break end
 end
 end
-if tool then
+if not tool then return end
+local id = tool:GetAttribute("Id") or tool:GetAttribute("ToolId") or tool.Name
 aim(t)
-pcall(function() tool:Activate() end)
-end
+pcall(function() API:WaitForChild("ToolAPI/ServerUseTool"):InvokeServer(tostring(id), "START") end)
+task.wait(0.1)
+pcall(function() API:WaitForChild("ToolAPI/ServerUseTool"):InvokeServer(tostring(id), "END") end)
 end
 
 local function antiFling()
-local h = getHRP(); if not h then return end
-if h.AssemblyLinearVelocity.Magnitude > 30 then
-h.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+local c = LocalPlayer.Character
+if not c then return end
+for _, part in pairs(c:GetDescendants()) do
+if part:IsA("LinearVelocity") or part:IsA("BodyVelocity") or part:IsA("BodyPosition") or part:IsA("AlignPosition") or part:IsA("BodyForce") or part:IsA("BodyThrust") then
+pcall(function() part:Destroy() end)
 end
-if h.AssemblyAngularVelocity.Magnitude > 5 then
+end
+local h = c:FindFirstChild("HumanoidRootPart")
+if h then
+h.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 h.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
 end
 end
@@ -374,33 +388,15 @@ task.wait(1)
 VirtualUser:Button2Up(Vector2.new(0, 0))
 end)
 
-RunService.Heartbeat:Connect(antiFling)
+RunService.RenderStepped:Connect(antiFling)
 
-task.spawn(function()
-while task.wait(1) do
-if config.disablePopups and not state.popupsFired then
-disablePopups()
-state.popupsFired = true
-end
-end
-end)
-
-task.spawn(function()
-while task.wait(1) do
-if config.ghostAccept then clickGhostGallery() end
-end
-end)
-
-task.spawn(function()
-task.wait(5)
-if config.autoEquip then autoEquipPet() end
-end)
+task.spawn(function() while task.wait(1) do if config.disablePopups and not state.popupsFired then disablePopups(); state.popupsFired = true end end end)
+task.spawn(function() while task.wait(1) do if config.ghostAccept then clickGhostGallery() end end end)
+task.spawn(function() task.wait(5); if config.autoEquip then autoEquipPet() end end)
 
 task.spawn(function()
 while task.wait(2) do
-if state.taskLock and os.clock() - state.lockTime > 60 then
-state.taskLock = false
-end
+if state.taskLock and os.clock() - state.lockTime > 60 then state.taskLock = false end
 if not config.taskLoop or state.taskLock then continue end
 local title, isPet = getActiveTaskInfo()
 if title then
@@ -425,9 +421,7 @@ aim(target.model)
 if config.autoShoot then shoot(target.model) end
 end
 end
-else
-enterTime = 0
-end
+else enterTime = 0 end
 end
 end)
 
@@ -451,8 +445,6 @@ Main:CreateToggle({Name = "Auto Equip Pet", CurrentValue = true, Callback = func
 
 Tasks:CreateToggle({Name = "Baby Tasks", CurrentValue = true, Callback = function(v) config.babyTasks = v end})
 Tasks:CreateToggle({Name = "Pet Tasks", CurrentValue = true, Callback = function(v) config.petTasks = v end})
-Tasks:CreateToggle({Name = "Walk Task", CurrentValue = true, Callback = function(v) config.walkTask = v end})
-Tasks:CreateToggle({Name = "Ride Task", CurrentValue = true, Callback = function(v) config.rideTask = v end})
 Tasks:CreateToggle({Name = "Block 'Pet Me' Task", CurrentValue = false, Callback = function(v) config.blockPetMe = v end})
 
 Ghost:CreateToggle({Name = "Ghost Hunt", CurrentValue = true, Callback = function(v) config.ghostHunt = v end})
