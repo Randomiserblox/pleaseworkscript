@@ -9,7 +9,6 @@ end
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local VirtualUser = game:GetService("VirtualUser")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 local API = ReplicatedStorage:WaitForChild("API")
@@ -80,35 +79,22 @@ end
 
 local function getActiveTaskInfo()
 local gui = LocalPlayer.PlayerGui:FindFirstChild("AilmentsMonitorApp")
-if not gui then return nil, false end
+if not gui then return nil end
 local pointer = gui:FindFirstChild("PointerBox")
-if not pointer then return nil, false end
+if not pointer then return nil end
 local box = pointer:FindFirstChild("BoxBorder")
-if not box then return nil, false end
+if not box then return nil end
 local area = box:FindFirstChild("TextArea")
-if not area then return nil, false end
+if not area then return nil end
 local title = area:FindFirstChild("Title")
-if not title then return nil, false end
+if not title then return nil end
 local name = title:FindFirstChild("AilmentName")
-if not name then return nil, false end
+if not name then return nil end
 return name.Text, isPetPopup()
 end
 
 local function checkTaskDone()
-local gui = LocalPlayer.PlayerGui:FindFirstChild("AilmentsMonitorApp")
-if not gui then return true end
-local pointer = gui:FindFirstChild("PointerBox")
-if not pointer then return true end
-local box = pointer:FindFirstChild("BoxBorder")
-if not box then return true end
-local area = box:FindFirstChild("TextArea")
-if not area then return true end
-local title = area:FindFirstChild("Title")
-if not title then return true end
-local name = title:FindFirstChild("AilmentName")
-if not name then return true end
-local s = (name.Text or ""):lower()
-return s == "complete" or s == "done!"
+return getActiveTaskInfo() == nil
 end
 
 local function firePromptsNearby()
@@ -127,8 +113,6 @@ local function waitForTaskEnd()
 local waited = 0
 while waited < 30 do
 if checkTaskDone() then return true end
-local title = getActiveTaskInfo()
-if not title then return true end
 task.wait(1)
 waited = waited + 1
 end
@@ -144,28 +128,12 @@ end
 local function feedLoop()
 local waited = 0
 while waited < 30 do
-local target = isPetPopup() and "pet" or "self"
-if target == "pet" then
-pressKey(Enum.KeyCode.Two)
-else
-pressKey(Enum.KeyCode.One)
-end
+if isPetPopup() then pressKey(Enum.KeyCode.Two)
+else pressKey(Enum.KeyCode.One) end
 if checkTaskDone() then break end
 task.wait(0.5)
 waited = waited + 1
 end
-end
-
-local function getToolId(tool)
-if not tool then return nil end
-local id = tool:GetAttribute("Id") or tool:GetAttribute("ToolId")
-if id then return tostring(id) end
-for _, c in pairs(tool:GetChildren()) do
-if c:IsA("StringValue") and c.Name:lower():find("id") then
-return tostring(c.Value)
-end
-end
-return tostring(tool.Name)
 end
 
 local function handleBabyFeed(zoneName)
@@ -177,17 +145,6 @@ firePromptsNearby()
 task.wait(1.5)
 firePromptsNearby()
 task.wait(1)
-local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-if not tool then waitForTaskEnd(); return end
-local id = getToolId(tool)
-if not id then waitForTaskEnd(); return end
-pcall(function() API:WaitForChild("ToolAPI/ServerUseTool"):InvokeServer(id, "START") end)
-task.wait(0.3)
-pcall(function() API:WaitForChild("JournalAPI/CommitCollection"):FireServer() end)
-pcall(function() API:WaitForChild("PlayerProfileAPI/RefreshProfile"):InvokeServer(LocalPlayer) end)
-task.wait(0.3)
-pcall(function() API:WaitForChild("ToolAPI/ServerUseTool"):InvokeServer(id, "END") end)
-pcall(function() API:WaitForChild("JournalAPI/CommitCollection"):FireServer() end)
 feedLoop()
 waitForTaskEnd()
 end
@@ -198,9 +155,7 @@ if not pet then return end
 local args = { pet, flags }
 local waited = 0
 while waited < 30 do
-pcall(function()
-API:WaitForChild("PetAPI/ReplicateActivePerformances"):FireServer(unpack(args))
-end)
+pcall(function() API:WaitForChild("PetAPI/ReplicateActivePerformances"):FireServer(unpack(args)) end)
 if checkTaskDone() then break end
 task.wait(0.5)
 waited = waited + 1
@@ -213,9 +168,7 @@ if not pet then return end
 local args = { pet }
 local waited = 0
 while waited < 30 do
-pcall(function()
-API:WaitForChild("AilmentsAPI/ProgressPetMeAilment"):FireServer(unpack(args))
-end)
+pcall(function() API:WaitForChild("AilmentsAPI/ProgressPetMeAilment"):FireServer(unpack(args)) end)
 if checkTaskDone() then break end
 task.wait(0.5)
 waited = waited + 1
@@ -228,19 +181,11 @@ if not pet then return end
 local args = { pet }
 local waited = 0
 while waited < 30 do
-pcall(function()
-API:WaitForChild("AilmentsAPI/ProgressDirtyAilment"):FireServer(unpack(args))
-end)
+pcall(function() API:WaitForChild("AilmentsAPI/ProgressDirtyAilment"):FireServer(unpack(args)) end)
 if checkTaskDone() then break end
 task.wait(0.5)
 waited = waited + 1
 end
-end
-
-local function chooseMystery()
-pcall(function()
-API:WaitForChild("AilmentsAPI/ChooseMysteryAilment"):FireServer()
-end)
 end
 
 local function handleTask(title, isPet)
@@ -248,21 +193,16 @@ if not title then return end
 local t = title:lower()
 if isPet and not config.petTasks then return end
 if not isPet and not config.babyTasks then return end
-
-if t:find("mystery") then chooseMystery(); return end
 if t:find("pet me") then
 if not config.blockPetMe then handlePetMe() end
 return
 end
 if t:find("dirty") then handleDirty(); return end
-
 if isPet then
 if t:find("sleepy") then handlePetAilment({ FallAsleep = true, FocusPet = true }); return end
 if t:find("sick") then handlePetAilment({ Sick = true, FocusPet = true }); return end
 if t:find("hungry") then handlePetAilment({ Hungry = true, FocusPet = true }); return end
 if t:find("thirsty") then handlePetAilment({ Thirsty = true, FocusPet = true }); return end
-if t:find("bored") then handlePetAilment({ FocusPet = true }); return end
-if t:find("lonely") then handlePetAilment({ FocusPet = true }); return end
 else
 if t:find("hungry") then handleBabyFeed("BabyApple"); return end
 if t:find("thirsty") then handleBabyFeed("BabyWater"); return end
@@ -274,8 +214,7 @@ if os.clock() - state.lastGalleryClick < 3 then return false end
 local hasGallery = false
 for _, g in pairs(LocalPlayer.PlayerGui:GetDescendants()) do
 if g:IsA("TextLabel") and (g.Text or ""):lower():find("ghost gallery") then
-hasGallery = true
-break
+hasGallery = true; break
 end
 end
 if not hasGallery then return false end
@@ -296,54 +235,27 @@ end
 local function autoEquipPet()
 if state.equipChecked then return end
 for _, g in pairs(LocalPlayer.PlayerGui:GetDescendants()) do
-if g:IsA("TextButton") then
-local s = (g.Text or ""):lower()
-if s == "equip" then
+if g:IsA("TextButton") and (g.Text or ""):lower() == "equip" then
 pcall(function() g:Activate() end)
 state.equipChecked = true
 return
 end
 end
 end
-end
 
-local cachedTarget, lastTargetCheck = nil, 0
-local function getSmartTarget()
-if os.clock() - lastTargetCheck < 0.5 and cachedTarget then
-if cachedTarget.model and cachedTarget.model.Parent then
-local prog = cachedTarget.model:GetAttribute("GhostClustersProgress") or 0
-local req = cachedTarget.model:GetAttribute("GhostClustersProgressRequired") or 100
-if prog < req then return cachedTarget end
+local function antiFling()
+local c = LocalPlayer.Character
+if not c then return end
+for _, part in pairs(c:GetDescendants()) do
+if part:IsA("LinearVelocity") or part:IsA("BodyVelocity") or part:IsA("BodyPosition") or part:IsA("AlignPosition") or part:IsA("BodyForce") or part:IsA("BodyThrust") then
+pcall(function() part:Destroy() end)
 end
 end
-lastTargetCheck = os.clock()
-cachedTarget = nil
-local h = getHRP(); if not h then return nil end
-local candidates = {}
-local visuals = workspace:FindFirstChild("GhostClustersVisuals")
-if visuals then
-for _, v in pairs(visuals:GetChildren()) do
-if v:IsA("Model") then
-local id = v:GetAttribute("GhostClustersId")
-local prog = v:GetAttribute("GhostClustersProgress") or 0
-local req = v:GetAttribute("GhostClustersProgressRequired") or 100
-local size = v:GetAttribute("GhostClustersSize") or "Small"
-local isBoss = size == "Large" or size == "Huge" or size == "Boss" or size == "Giant"
-local hrp = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChildWhichIsA("BasePart", true)
-if hrp and id and prog < req then
-table.insert(candidates, { model = v, id = id, required = req, isBoss = isBoss, dist = (hrp.Position - h.Position).Magnitude })
+local h = c:FindFirstChild("HumanoidRootPart")
+if h then
+h.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+h.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
 end
-end
-end
-end
-if #candidates == 0 then return nil end
-table.sort(candidates, function(a, b)
-if a.isBoss ~= b.isBoss then return a.isBoss end
-if a.required ~= b.required then return a.required < b.required end
-return a.dist < b.dist
-end)
-cachedTarget = candidates[1]
-return cachedTarget
 end
 
 local function aim(t)
@@ -367,19 +279,32 @@ task.wait(0.1)
 pcall(function() API:WaitForChild("ToolAPI/ServerUseTool"):InvokeServer(tostring(id), "END") end)
 end
 
-local function antiFling()
-local c = LocalPlayer.Character
-if not c then return end
-for _, part in pairs(c:GetDescendants()) do
-if part:IsA("LinearVelocity") or part:IsA("BodyVelocity") or part:IsA("BodyPosition") or part:IsA("AlignPosition") or part:IsA("BodyForce") or part:IsA("BodyThrust") then
-pcall(function() part:Destroy() end)
+local function getSmartTarget()
+local h = getHRP(); if not h then return nil end
+local candidates = {}
+local visuals = workspace:FindFirstChild("GhostClustersVisuals")
+if visuals then
+for _, v in pairs(visuals:GetChildren()) do
+if v:IsA("Model") then
+local id = v:GetAttribute("GhostClustersId")
+local prog = v:GetAttribute("GhostClustersProgress") or 0
+local req = v:GetAttribute("GhostClustersProgressRequired") or 100
+local size = v:GetAttribute("GhostClustersSize") or "Small"
+local isBoss = size == "Large" or size == "Huge" or size == "Boss" or size == "Giant"
+local hrp = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChildWhichIsA("BasePart", true)
+if hrp and id and prog < req then
+table.insert(candidates, { model = v, required = req, isBoss = isBoss, dist = (hrp.Position - h.Position).Magnitude })
 end
 end
-local h = c:FindFirstChild("HumanoidRootPart")
-if h then
-h.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-h.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
 end
+end
+if #candidates == 0 then return nil end
+table.sort(candidates, function(a, b)
+if a.isBoss ~= b.isBoss then return a.isBoss end
+if a.required ~= b.required then return a.required < b.required end
+return a.dist < b.dist
+end)
+return candidates[1]
 end
 
 LocalPlayer.Idled:Connect(function()
