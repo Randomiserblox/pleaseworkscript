@@ -13,14 +13,14 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 local API = ReplicatedStorage:WaitForChild("API")
 
-local state = { taskLock = false, lockTime = 0, lastTP = 0, popupsFired = false, lastGalleryClick = 0 }
+local state = { taskLock = false, lockTime = 0, lastTP = 0, popupsFired = false, lastGalleryClick = 0, equipChecked = false }
 
 local config = {
 ghostHunt = true, aimbot = true, autoShoot = true,
 ghostAccept = true, taskLoop = true, antiAfk = true,
 disablePopups = true, blockPetMe = false,
 babyTasks = true, petTasks = true,
-walkTask = true, rideTask = true
+walkTask = true, rideTask = true, autoEquip = true
 }
 
 local townZones = {
@@ -31,12 +31,11 @@ BabyWater = Vector3.new(-3023.935, 4013.070, 5634.844)
 local minigameCenter = Vector3.new(-5982.613, 10011.106, 9000.880)
 local minigameRadius = 800
 
+-- only these are considered real task titles
 local knownTasks = {
-"hungry", "thirsty", "sleepy", "dirty", "sick",
-"pet me", "bored", "lonely", "walk", "ride", "potty"
+"thirsty!", "hungry!", "sleepy!", "dirty!", "sick!",
+"pet me!", "bored!", "lonely!", "walk!", "ride!", "potty!"
 }
-
-local petTaskWords = { "pet me", "bored", "lonely" }
 
 local function getHRP()
 local c = LocalPlayer.Character
@@ -90,26 +89,17 @@ return false
 end
 
 local function getActiveTaskInfo()
-local blacklist = { "ghost", "gallery", "welcome", "reward", "complete", "well done", "next", "bucks", "xp" }
 local bestTitle, bestLen = nil, 999
 for _, g in pairs(LocalPlayer.PlayerGui:GetDescendants()) do
 if g:IsA("TextLabel") then
 local s = g.Text or ""
-if s:find("!") and #s < 25 then
 local ls = s:lower()
-local skip = false
-for _, b in pairs(blacklist) do
-if ls:find(b) then skip = true; break end
-end
-if not skip then
-local matched = false
+-- exact match against known task titles
 for _, k in pairs(knownTasks) do
-if ls:find(k) then matched = true; break end
-end
-if matched and #s < bestLen then
+if ls == k and #s < bestLen then
 bestTitle = s
 bestLen = #s
-end
+break
 end
 end
 end
@@ -288,6 +278,20 @@ local function disablePopups()
 pcall(function() API:WaitForChild("PayAPI/DisablePopups"):FireServer() end)
 end
 
+local function autoEquipPet()
+if state.equipChecked then return end
+for _, g in pairs(LocalPlayer.PlayerGui:GetDescendants()) do
+if g:IsA("TextButton") then
+local s = (g.Text or ""):lower()
+if s == "equip" then
+pcall(function() g:Activate() end)
+state.equipChecked = true
+return
+end
+end
+end
+end
+
 local cachedTarget = nil
 local lastTargetCheck = 0
 
@@ -356,10 +360,10 @@ end
 
 local function antiFling()
 local h = getHRP(); if not h then return end
-if h.AssemblyLinearVelocity.Magnitude > 80 then
+if h.AssemblyLinearVelocity.Magnitude > 30 then
 h.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 end
-if h.AssemblyAngularVelocity.Magnitude > 20 then
+if h.AssemblyAngularVelocity.Magnitude > 5 then
 h.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
 end
 end
@@ -385,6 +389,11 @@ task.spawn(function()
 while task.wait(1) do
 if config.ghostAccept then clickGhostGallery() end
 end
+end)
+
+task.spawn(function()
+task.wait(5)
+if config.autoEquip then autoEquipPet() end
 end)
 
 task.spawn(function()
@@ -438,6 +447,7 @@ Main:CreateToggle({Name = "Anti AFK", CurrentValue = true, Callback = function(v
 Main:CreateToggle({Name = "Auto Accept Ghost Gallery", CurrentValue = true, Callback = function(v) config.ghostAccept = v end})
 Main:CreateToggle({Name = "Task Loop", CurrentValue = true, Callback = function(v) config.taskLoop = v end})
 Main:CreateToggle({Name = "Disable Popup (Once)", CurrentValue = true, Callback = function(v) config.disablePopups = v; if v then disablePopups(); state.popupsFired = true end end})
+Main:CreateToggle({Name = "Auto Equip Pet", CurrentValue = true, Callback = function(v) config.autoEquip = v; if v then state.equipChecked = false; autoEquipPet() end end})
 
 Tasks:CreateToggle({Name = "Baby Tasks", CurrentValue = true, Callback = function(v) config.babyTasks = v end})
 Tasks:CreateToggle({Name = "Pet Tasks", CurrentValue = true, Callback = function(v) config.petTasks = v end})
