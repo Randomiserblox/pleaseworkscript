@@ -18,7 +18,9 @@ local state = { taskLock = false, lockTime = 0, lastTP = 0, popupsFired = false,
 local config = {
 ghostHunt = true, aimbot = true, autoShoot = true,
 ghostAccept = true, taskLoop = true, antiAfk = true,
-disablePopups = true, blockPetMe = false
+disablePopups = true, blockPetMe = false,
+babyTasks = true, petTasks = true,
+walkTask = true, rideTask = true
 }
 
 local townZones = {
@@ -33,6 +35,8 @@ local knownTasks = {
 "hungry", "thirsty", "sleepy", "dirty", "sick",
 "pet me", "bored", "lonely", "walk", "ride", "potty"
 }
+
+local petTaskWords = { "pet me", "bored", "lonely" }
 
 local function getHRP()
 local c = LocalPlayer.Character
@@ -66,9 +70,7 @@ local names = {}
 local pets = workspace:FindFirstChild("Pets")
 if not pets then return names end
 for _, p in pairs(pets:GetChildren()) do
-if p:IsA("Model") then
-table.insert(names, p.Name:lower())
-end
+if p:IsA("Model") then table.insert(names, p.Name:lower()) end
 end
 return names
 end
@@ -225,11 +227,15 @@ local function handleTask(title, isPet)
 if not title then return end
 local t = title:lower()
 
+if isPet and not config.petTasks then return end
+if not isPet and not config.babyTasks then return end
+
 if t:find("pet me") then
 if not config.blockPetMe then handlePetMe() end
 return
 end
 if t:find("walk") then
+if not config.walkTask then return end
 local h = getHRP()
 local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
 if h and humanoid then
@@ -243,6 +249,7 @@ waitForTaskEnd()
 return
 end
 if t:find("ride") then
+if not config.rideTask then return end
 waitForTaskEnd()
 return
 end
@@ -424,13 +431,19 @@ KeySystem = false
 })
 
 local Main = Window:CreateTab("Main", 4483362458)
+local Tasks = Window:CreateTab("Tasks", 4483362458)
 local Ghost = Window:CreateTab("Ghost", 4483362458)
 
 Main:CreateToggle({Name = "Anti AFK", CurrentValue = true, Callback = function(v) config.antiAfk = v end})
 Main:CreateToggle({Name = "Auto Accept Ghost Gallery", CurrentValue = true, Callback = function(v) config.ghostAccept = v end})
 Main:CreateToggle({Name = "Task Loop", CurrentValue = true, Callback = function(v) config.taskLoop = v end})
 Main:CreateToggle({Name = "Disable Popup (Once)", CurrentValue = true, Callback = function(v) config.disablePopups = v; if v then disablePopups(); state.popupsFired = true end end})
-Main:CreateToggle({Name = "Block 'Pet Me' Task", CurrentValue = false, Callback = function(v) config.blockPetMe = v end})
+
+Tasks:CreateToggle({Name = "Baby Tasks", CurrentValue = true, Callback = function(v) config.babyTasks = v end})
+Tasks:CreateToggle({Name = "Pet Tasks", CurrentValue = true, Callback = function(v) config.petTasks = v end})
+Tasks:CreateToggle({Name = "Walk Task", CurrentValue = true, Callback = function(v) config.walkTask = v end})
+Tasks:CreateToggle({Name = "Ride Task", CurrentValue = true, Callback = function(v) config.rideTask = v end})
+Tasks:CreateToggle({Name = "Block 'Pet Me' Task", CurrentValue = false, Callback = function(v) config.blockPetMe = v end})
 
 Ghost:CreateToggle({Name = "Ghost Hunt", CurrentValue = true, Callback = function(v) config.ghostHunt = v end})
 Ghost:CreateToggle({Name = "Aimbot", CurrentValue = true, Callback = function(v) config.aimbot = v end})
